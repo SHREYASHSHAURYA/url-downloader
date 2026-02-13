@@ -54,8 +54,8 @@ url-downloader/
 ├── public/
 │   └── index.html
 │
-├── downloads/              (ignored in git)
-├── download_state.json     (ignored in git)
+├── downloads/
+├── download_state.json
 │
 ├── server.js
 ├── .env
@@ -67,22 +67,15 @@ url-downloader/
 
 ## Installation
 
-1. Clone the repository
-
-```
-git clone <your-repo-url>
-cd url-downloader
-```
-
-2. Install dependencies
+1. Install dependencies
 
 ```
 npm install
 ```
 
-3. Place `yt-dlp.exe` in the root directory
+2. Place `yt-dlp.exe` in the root directory
 
-4. Start the server
+3. Start the server
 
 ```
 node server.js
