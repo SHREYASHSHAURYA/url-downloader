@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>URL Downloader</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #0f1115, #0b1f3a, #0f1115);
+      background-size: 400% 400%;
+      animation: gradientMove 12s ease infinite;
+      color: #e5e7eb;
+    }
+
+    @keyframes gradientMove {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .container {
+      width: 520px;
+      padding: 40px;
+      border-radius: 16px;
+      background: rgba(22, 27, 34, 0.65);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 28px;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid #2d333b;
+      background: #0f1115;
+      color: #e5e7eb;
+      margin-bottom: 15px;
+      outline: none;
+      transition: 0.3s;
+    }
+
+    input:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 10px #3b82f6;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .input-row input {
+      flex: 1;
+      margin-bottom: 0;
+    }
+
+    .input-row button {
+      white-space: nowrap;
+    }
+
+    button {
+      padding: 12px 22px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      margin-right: 10px;
+      transition: 0.3s;
+    }
+
+    .download-btn {
+      background: linear-gradient(90deg, #2563eb, #3b82f6);
+      color: white;
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+    }
+
+    .download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 18px rgba(59, 130, 246, 0.9);
+    }
+
+    .cancel-btn {
+      background: transparent;
+      color: #60a5fa;
+      border: 1px solid #3b82f6;
+    }
+
+    .cancel-btn:hover {
+      background: rgba(59, 130, 246, 0.15);
+    }
+
+    .force-btn {
+      margin-top: 10px;
+      background: #3b82f6;
+      color: white;
+    }
+
+    #status {
+      margin-top: 20px;
+      font-size: 14px;
+    }
+
+    .progress-bar {
+      margin-top: 12px;
+      width: 100%;
+      height: 8px;
+      background: #1f2937;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      transition: width 0.5s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>URL Downloader</h1>
+
+    <div class="input-row">
+      <input type="text" id="urlInput" placeholder="Paste video URL here" />
+      <button class="download-btn" onclick="startDownload()">Download</button>
+    </div>
+
+    <button id="cancelBtn" class="cancel-btn" onclick="cancelDownload()" style="display:none;">
+      Cancel
+    </button>
+
+    <div id="status">Idle</div>
+
+    <div class="progress-bar">
+      <div id="progressFill" class="progress-fill"></div>
+    </div>
+  </div>
+
+<script>
+let currentDownloadId = null;
+let pollInterval = null;
+
+async function startDownload(force = false) {
+  const url = document.getElementById("urlInput").value;
+  if (!url) return;
+
+  clearInterval(pollInterval);
+  document.getElementById("progressFill").style.width = "0%";
+  document.getElementById("status").innerText = "Starting download...";
+
+  const response = await fetch("/api/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, force })
+  });
+
+  const data = await response.json();
+
+  if (!data.downloadId) {
+    document.getElementById("status").innerText =
+      data.error || "Failed to start download";
+    return;
+  }
+
+  currentDownloadId = data.downloadId;
+  document.getElementById("cancelBtn").style.display = "inline-block";
+
+  pollStatus(currentDownloadId);
+}
+
+function pollStatus(id) {
+  pollInterval = setInterval(async () => {
+    const response = await fetch(`/api/status/${id}`);
+    const data = await response.json();
+
+    if (data.status === "exists") {
+      clearInterval(pollInterval);
+      document.getElementById("cancelBtn").style.display = "none";
+      document.getElementById("status").innerHTML =
+        `File already exists.<br>
+         <button class="force-btn" onclick="startDownload(true)">
+           Download Again
+         </button>`;
+      return;
+    }
+
+    document.getElementById("status").innerText =
+      `Status: ${data.status} | Progress: ${data.progress}`;
+
+    const percent = parseFloat(data.progress) || 0;
+    document.getElementById("progressFill").style.width = percent + "%";
+
+    if (
+      data.status === "completed" ||
+      data.status === "failed" ||
+      data.status === "too_large" ||
+      data.status === "cancelled"
+    ) {
+      clearInterval(pollInterval);
+      document.getElementById("cancelBtn").style.display = "none";
+    }
+  }, 1500);
+}
+
+async function cancelDownload() {
+  if (!currentDownloadId) return;
+
+  await fetch(`/api/cancel/${currentDownloadId}`, {
+    method: "POST"
+  });
+
+  clearInterval(pollInterval);
+  document.getElementById("cancelBtn").style.display = "none";
+  document.getElementById("status").innerText = "Cancelled";
+  document.getElementById("progressFill").style.width = "0%";
+}
+</script>
+
+</body>
+</html>
