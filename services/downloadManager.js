@@ -76,6 +76,24 @@ setInterval(cleanupOldMetadata, 60 * 60 * 1000);
 
 loadState();
 
+function getUniqueFilename(filePath) {
+  if (!fs.existsSync(filePath)) return filePath;
+
+  const dir = path.dirname(filePath);
+  const ext = path.extname(filePath);
+  const base = path.basename(filePath, ext);
+
+  let counter = 1;
+  let newPath;
+
+  do {
+    newPath = path.join(dir, `${base} (${counter})${ext}`);
+    counter++;
+  } while (fs.existsSync(newPath));
+
+  return newPath;
+}
+
 function startDownload(url, force = false) {
   if (Object.keys(runningProcesses).length >= MAX_CONCURRENT_DOWNLOADS) {
     log("Rejected: concurrency limit reached");
@@ -98,8 +116,13 @@ function startDownload(url, force = false) {
 
   saveState();
 
-  const outputTemplate = path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s");
+  let outputTemplate;
 
+  if (force) {
+    outputTemplate = path.join(DOWNLOADS_DIR, "%(title)s_%(id)s.%(ext)s");
+  } else {
+    outputTemplate = path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s");
+  }
   const formats = [
     "bestvideo+bestaudio",
     "bestvideo[height<=720]+bestaudio",
@@ -111,7 +134,7 @@ function startDownload(url, force = false) {
 
   const run = () => {
     if (currentIndex >= formats.length) {
-      downloads[id].status = "too_large";
+      downloads[id].status = sizeExceeded ? "too_large" : "failed";
       downloads[id].finishedAt = Date.now();
       saveState();
       return;
@@ -120,7 +143,6 @@ function startDownload(url, force = false) {
     const args = [
       "--newline",
       "--no-playlist",
-      "--continue",
       "--limit-rate",
       RATE_LIMIT,
       "--max-filesize",
@@ -132,7 +154,10 @@ function startDownload(url, force = false) {
     ];
 
     if (force) {
+      args.push("--no-continue");
       args.push("--no-overwrites");
+    } else {
+      args.push("--continue");
     }
 
     args.push(url);
@@ -159,7 +184,7 @@ function startDownload(url, force = false) {
         downloads[id].filename = path.basename(fileMatch[1].trim());
       }
 
-      if (text.includes("has already been downloaded")) {
+      if (text.includes("has already been downloaded") && !force) {
         downloads[id].status = "exists";
         downloads[id].progress = "100%";
       }
@@ -199,6 +224,16 @@ function startDownload(url, force = false) {
       }
 
       if (code === 0) {
+        if (force && downloads[id].filename) {
+          const originalPath = path.join(DOWNLOADS_DIR, downloads[id].filename);
+          const newPath = getUniqueFilename(originalPath);
+
+          if (originalPath !== newPath) {
+            fs.renameSync(originalPath, newPath);
+            downloads[id].filename = path.basename(newPath);
+          }
+        }
+
         downloads[id].status = "completed";
         downloads[id].progress = "100%";
         downloads[id].finishedAt = Date.now();
