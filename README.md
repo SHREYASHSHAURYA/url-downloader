@@ -78,7 +78,7 @@ npm install
 3. Start the server
 
 ```
-node server.js
+npm run dev
 ```
 
 Server runs on:
